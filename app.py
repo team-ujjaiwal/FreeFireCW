@@ -16,12 +16,11 @@ API_URL = "https://client.ind.freefiremobile.com/GetWishListItems"
 TOKEN_URL = "https://aditya-jwt-v9op.onrender.com/token?uid=3959788424&password=513E781858206A2994D10F7E767C4F1567549C7A4343488663B6EBC9A0880E31"
 ITEM_IMAGE_API = "https://freefireinfo.vercel.app/icon?id={item_id}"
 
-# Configure logging
+# Configure logging (console only — safe for Vercel, AWS, etc.)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('wishlist_api.log'),
         logging.StreamHandler()
     ]
 )
