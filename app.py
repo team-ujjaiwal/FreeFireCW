@@ -198,7 +198,7 @@ def get_wishlist():
         'User-Agent': 'UnityPlayer/2022.3.47f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)',
         'Authorization': f'Bearer {jwt_token}',
         'X-Ga': 'v1 1',
-        'Releaseversion': 'OB49',
+        'Releaseversion': 'OB50',
         'Content-Type': 'application/x-www-form-urlencoded',
         'X-Unity-Version': '2022.3.47f1',
         'Account-Id': account_info.get("accountId", ""),
