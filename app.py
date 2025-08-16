@@ -13,7 +13,7 @@ app = Flask(__name__)
 AES_KEY = b'Yg&tc%DEuh6%Zc^8'
 AES_IV = b'6oyZDr22E3ychjM%'
 API_URL = "https://client.ind.freefiremobile.com/GetWishListItems"
-TOKEN_URL = "https://team-ujjaiwal-jwt.vercel.app/token?uid=3959788424&password=513E781858206A2994D10F7E767C4F1567549C7A4343488663B6EBC9A0880E31"
+TOKEN_URL = "https://fd-jwt-ob50.vercel.app/token?uid=3959788424&password=513E781858206A2994D10F7E767C4F1567549C7A4343488663B6EBC9A0880E31"
 ITEM_IMAGE_API = "https://www.craftland.freefireinfo.site/output/{item_id}.png"
 
 # Configure logging (console only — safe for Vercel, AWS, etc.)
