@@ -1,284 +1,176 @@
-from flask import Flask, request, jsonify
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
+from Crypto.Util.Padding import pad
+import binascii
 import requests
-import logging
-from datetime import datetime
+from flask import Flask, jsonify, request
+from GetWishListItems_pb2 import CSGetWishListItemsRes
+from google.protobuf.json_format import MessageToDict
+import uid_generator_pb2
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 app = Flask(__name__)
+jwt_token = None
+jwt_lock = threading.Lock()
 
-# Constants
-AES_KEY = b'Yg&tc%DEuh6%Zc^8'
-AES_IV = b'6oyZDr22E3ychjM%'
-API_URL = "https://client.ind.freefiremobile.com/GetWishListItems"
-TOKEN_URL = "https://fd-jwt-ob50.vercel.app/token?uid=3959788424&password=513E781858206A2994D10F7E767C4F1567549C7A4343488663B6EBC9A0880E31"
-ITEM_IMAGE_API = "https://www.craftland.freefireinfo.site/output/{item_id}.png"
+def convert_timestamp(release_time):
+    return datetime.utcfromtimestamp(release_time).strftime('%Y-%m-%d %H:%M:%S')
 
-# Configure logging (console only — safe for Vercel, AWS, etc.)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
-)
+def extract_token_from_response(data, region):
+    if region == "IND":
+        if data.get('status') in ['success', 'live']:
+            return data.get('token')
+    elif region in ["BR", "US", "SAC", "NA"]:
+        if isinstance(data, dict) and 'token' in data:
+            return data['token']
+    else: 
+        # New JWT API response format
+        if isinstance(data, dict) and 'token' in data:
+            return data['token']
+        elif data.get('status') == 'success':
+            return data.get('token')
+    return None
 
-# Cache setup
-token_cache = {
-    'token': None,
-    'expiry': 0,
-    'account_info': None
-}
-
-# Rate limiting
-request_tracker = {}
-
-# Thread pool for parallel image fetching
-executor = ThreadPoolExecutor(max_workers=10)
-
-# Helper Functions
-def aes_cbc_encrypt(plaintext: bytes) -> bytes:
-    cipher = AES.new(AES_KEY, AES.MODE_CBC, AES_IV)
-    return cipher.encrypt(pad(plaintext, AES.block_size, style='pkcs7'))
-
-def aes_cbc_decrypt(ciphertext: bytes) -> bytes:
-    cipher = AES.new(AES_KEY, AES.MODE_CBC, AES_IV)
-    return unpad(cipher.decrypt(ciphertext), AES.block_size, 'pkcs7')
-
-def encode_varint(value: int) -> bytes:
-    buf = b""
-    while True:
-        towrite = value & 0x7F
-        value >>= 7
-        if value:
-            buf += bytes((towrite | 0x80,))
-        else:
-            buf += bytes((towrite,))
-            break
-    return buf
-
-def decode_varint(data, index):
-    result, shift, length = 0, 0, 0
-    while index + length < len(data):
-        byte = data[index + length]
-        result |= (byte & 0x7F) << shift
-        length += 1
-        if not (byte & 0x80):
-            return result, index + length
-        shift += 7
-    raise IndexError("Invalid varint data")
-
-def create_request_payload(target_uid: int) -> bytes:
-    return b'\x08' + encode_varint(target_uid)
-
-def get_jwt_token():
-    try:
-        current_time = time.time()
-        if token_cache['token'] and token_cache['expiry'] > current_time:
-            return token_cache['token'], token_cache['account_info']
-            
-        response = requests.get(TOKEN_URL, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            token = data.get("token")
-            if token:
-                ttl = data.get("ttl", 28800)
-                token_cache['token'] = token
-                token_cache['expiry'] = current_time + ttl - 60
-                token_cache['account_info'] = {
-                    "accountId": data.get("accountId"),
-                    "ipRegion": data.get("ipRegion"),
-                    "lockRegion": data.get("lockRegion"),
-                    "serverUrl": data.get("serverUrl")
-                }
-                return token, token_cache['account_info']
-        
-        logging.error(f"Failed to fetch token: HTTP {response.status_code}")
-        return None, None
-        
-    except Exception as e:
-        logging.error(f"Token fetch error: {str(e)}")
-        return None, None
-
-def parse_wishlist_response(data):
-    item_ids = []
-    index = 0
-    while index < len(data):
+def get_jwt_token_sync(region):
+    global jwt_token
+    endpoints = {
+        "IND": "https://100067.vercel.app/token?uid=3828066210&password=C41B0098956AE7B79F752FCA873C747060C71D3C17FBE4794F5EB9BD71D4DA95",
+        "BR": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
+        "US": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
+        "SAC": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
+        "NA": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
+        "default": "https://100067.vercel.app/token?uid=3943739516&password=BFA0A0D9DF6D4EE1AA92354746475A429D775BCA4D8DD822ECBC6D0BF7B51886"
+    }    
+    
+    url = endpoints.get(region, endpoints["default"])
+    
+    with jwt_lock:
         try:
-            tag, index = decode_varint(data, index)
-            field, wire_type = tag >> 3, tag & 7
-
-            if field == 1 and wire_type == 0:
-                item_id, index = decode_varint(data, index)
-                item_ids.append(item_id)
-            elif field == 1 and wire_type == 2:
-                length, index = decode_varint(data, index)
-                sub_data = data[index:index+length]
-                index += length
-                item_ids.extend(parse_wishlist_response(sub_data))
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                token = extract_token_from_response(data, region)
+                if token:
+                    jwt_token = token
+                    print(f"JWT Token for {region} updated successfully: {token[:50]}...")
+                    return jwt_token
+                else:
+                    print(f"Failed to extract token from response for {region}. Response: {data}")
             else:
-                if wire_type == 0:
-                    _, index = decode_varint(data, index)
-                elif wire_type == 1:
-                    index += 8
-                elif wire_type == 2:
-                    length, index = decode_varint(data, index)
-                    index += length
-                elif wire_type == 5:
-                    index += 4
-        except IndexError:
-            break
-    return item_ids
+                print(f"Failed to get JWT token for {region}: HTTP {response.status_code}")
+        except Exception as e:
+            print(f"Request error for {region}: {e}")   
+    return None
 
-def fetch_item_image(item_id):
+def ensure_jwt_token_sync(region):
+    global jwt_token
+    if not jwt_token:
+        print(f"JWT token for {region} is missing. Attempting to fetch a new one...")
+        return get_jwt_token_sync(region)
+    return jwt_token
+
+def jwt_token_updater(region):
+    while True:
+        get_jwt_token_sync(region)
+        time.sleep(300)
+
+def get_api_endpoint(region):
+    endpoints = {
+        "IND": "https://client.ind.freefiremobile.com/GetWishListItems",
+        "BR": "https://client.us.freefiremobile.com/GetWishListItems",
+        "US": "https://client.us.freefiremobile.com/GetWishListItems",
+        "SAC": "https://client.us.freefiremobile.com/GetWishListItems",
+        "NA": "https://client.us.freefiremobile.com/GetWishListItems",
+        "default": "https://clientbp.ggblueshark.com/GetWishListItems"
+    }
+    return endpoints.get(region, endpoints["default"])
+
+key = "Yg&tc%DEuh6%Zc^8"
+iv = "6oyZDr22E3ychjM%"
+
+def encrypt_aes(hex_data, key, iv):
+    key = key.encode()[:16]
+    iv = iv.encode()[:16]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    padded_data = pad(bytes.fromhex(hex_data), AES.block_size)
+    encrypted_data = cipher.encrypt(padded_data)
+    return binascii.hexlify(encrypted_data).decode()
+
+def apis(idd, region):
+    global jwt_token    
+    token = ensure_jwt_token_sync(region)
+    if not token:
+        raise Exception(f"Failed to get JWT token for region {region}")    
+    endpoint = get_api_endpoint(region)    
+    headers = {
+        'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)',
+        'Connection': 'Keep-Alive',
+        'Expect': '100-continue',
+        'Authorization': f'Bearer {token}',
+        'X-Unity-Version': '2018.4.11f1',
+        'X-GA': 'v1 1',
+        'ReleaseVersion': 'OB50',
+        'Content-Type': 'application/x-www-form-urlencoded',
+    }    
     try:
-        url = ITEM_IMAGE_API.format(item_id=item_id)
-        response = requests.get(url, timeout=3)
-        if response.status_code == 200:
-            return response.url
-        return None
-    except Exception as e:
-        logging.warning(f"Failed to fetch image for item {item_id}: {str(e)}")
-        return None
-
-def process_items(item_ids):
-    futures = [executor.submit(fetch_item_image, item_id) for item_id in item_ids]
-    results = [future.result() for future in futures]
-    
-    formatted_items = []
-    for item_id, image_url in zip(item_ids, results):
-        formatted_items.append({
-            "item_id": str(item_id),
-            "image_url": image_url if image_url else "Not available"
-        })
-    
-    return formatted_items
+        data = bytes.fromhex(idd)
+        response = requests.post(
+            endpoint,
+            headers=headers,
+            data=data,
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.content.hex()
+    except requests.exceptions.RequestException as e:
+        print(f"API request to {endpoint} failed: {e}")
+        raise
 
 @app.route('/wishlist', methods=['GET'])
-def get_wishlist():
-    client_ip = request.remote_addr
-    current_time = time.time()
-    
-    if client_ip in request_tracker:
-        request_tracker[client_ip] = [t for t in request_tracker[client_ip] if current_time - t < 60]
-        if len(request_tracker[client_ip]) >= 10:
-            return jsonify({
-                "status": "error",
-                "code": 429,
-                "message": "Too many requests. Please try again later.",
-                "timestamp": datetime.utcnow().isoformat()
-            }), 429
-    else:
-        request_tracker[client_ip] = []
-    
-    request_tracker[client_ip].append(current_time)
-    
-    # Get target UID from query parameters
-    target_uid = request.args.get('uid')
-    if not target_uid or not target_uid.isdigit():
-        return jsonify({
-            "status": "error",
-            "code": 400,
-            "message": "Invalid UID provided. Please provide a valid numeric UID.",
-            "timestamp": datetime.utcnow().isoformat()
-        }), 400
-
-    jwt_token, account_info = get_jwt_token()
-    if not jwt_token:
-        return jsonify({
-            "status": "error",
-            "code": 500,
-            "message": "Failed to authenticate with the service. Please try again later.",
-            "timestamp": datetime.utcnow().isoformat()
-        }), 500
-
-    headers = {
-        'User-Agent': 'UnityPlayer/2022.3.47f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)',
-        'Authorization': f'Bearer {jwt_token}',
-        'X-Ga': 'v1 1',
-        'Releaseversion': 'OB50',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'X-Unity-Version': '2022.3.47f1',
-        'Account-Id': account_info.get("accountId", ""),
-        'Region': account_info.get("lockRegion", "IND")
-    }
-
+def get_player_info():
     try:
-        # Prepare and send request
-        payload = create_request_payload(int(target_uid))
-        encrypted = aes_cbc_encrypt(payload)
-        response = requests.post(API_URL, headers=headers, data=encrypted, timeout=10)
-
-        if response.status_code == 200 and response.content:
-            try:
-                decrypted_data = aes_cbc_decrypt(response.content)
-                data_to_parse = decrypted_data
-            except (ValueError, IndexError) as e:
-                logging.warning(f"Decryption failed, trying raw data: {str(e)}")
-                data_to_parse = response.content
-
-            item_ids = parse_wishlist_response(data_to_parse)
-            formatted_items = process_items(item_ids)
-            
-            # Format the response as requested
-            item_ids_str = ", ".join([str(item['item_id']) for item in formatted_items])
-            image_urls_str = ", ".join([item['image_url'] for item in formatted_items if item['image_url'] != "Not available"])
-            
-            output = {
-                "metadata": {
-                    "account_used": account_info.get("accountId"),
-                    "region": account_info.get("lockRegion"),
-                    "requested_uid": int(target_uid),
-                    "server": account_info.get("serverUrl")
-                },
-                "results": [{
-                    "wishlist": [{
-                        "Count": len(item_ids),
-                        "retrieved_at": datetime.now().strftime("%Y-%m-%d %I:%M:%S %p"),
-                        "item_id": item_ids_str,
-                        "image_url": [image_urls_str]
-                    }]
-                }]
-            }
-            
-            return jsonify(output)
-            
-        return jsonify({
-            "status": "error",
-            "code": response.status_code,
-            "message": f"No data received from server (HTTP {response.status_code})",
-            "timestamp": datetime.utcnow().isoformat()
-        }), response.status_code
+        uid = request.args.get('uid')
+        region = request.args.get('region', 'default').upper()
+        custom_key = request.args.get('key', key)
+        custom_iv = request.args.get('iv', iv)
         
+        if not uid:
+            return jsonify({"error": "UID parameter is required"}), 400
+            
+        threading.Thread(target=jwt_token_updater, args=(region,), daemon=True).start()
+        
+        # إنشاء الرسالة Protocol Buffer
+        message = uid_generator_pb2.uid_generator()
+        message.saturn_ = int(uid)
+        message.garena = 1
+        protobuf_data = message.SerializeToString()
+        hex_data = binascii.hexlify(protobuf_data).decode()
+        encrypted_hex = encrypt_aes(hex_data, custom_key, custom_iv)
+        api_response_hex = apis(encrypted_hex, region)         
+        if not api_response_hex:
+            return jsonify({"error": "Empty response from API"}), 400
+        api_response_bytes = bytes.fromhex(api_response_hex)
+        decoded_response = CSGetWishListItemsRes()
+        decoded_response.ParseFromString(api_response_bytes)    
+        wishlist = [
+            {
+                "item_id": item.item_id, 
+                "release_time": convert_timestamp(item.release_time)
+            }
+            for item in decoded_response.items
+        ]            
+        return jsonify({"uid": uid, "wishlist": wishlist})  
+    except ValueError:
+        return jsonify({"error": "Invalid UID format"}), 400
     except Exception as e:
-        logging.error(f"Error occurred: {e}")
-        return jsonify({
-            "status": "error",
-            "code": 500,
-            "message": "An internal server error occurred",
-            "error_details": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }), 500
+        print(f"Error processing request: {e}")
+        return jsonify({"error": f"Failure to process the data: {str(e)}"}), 500
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    token_status = "healthy"
-    try:
-        test_resp = requests.get(TOKEN_URL, timeout=3)
-        if test_resp.status_code != 200:
-            token_status = f"unhealthy (HTTP {test_resp.status_code})"
-    except Exception as e:
-        token_status = f"unreachable ({str(e)})"
-    
-    return jsonify({
-        "status": "healthy",
-        "service": "FreeFire Wishlist API",
-        "version": "1.2",
-        "token_service": token_status,
-        "timestamp": datetime.utcnow().isoformat()
-    })
+@app.route('/favicon.ico')
+def favicon():
+    return '', 404
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    ensure_jwt_token_sync("default")
+    app.run(host="0.0.0.0", port=5552)
