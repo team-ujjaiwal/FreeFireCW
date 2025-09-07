@@ -9,6 +9,7 @@ import uid_generator_pb2
 import threading
 import time
 from datetime import datetime
+import re  # Add this import for regex operations
 
 app = Flask(__name__)
 jwt_token = None
@@ -16,6 +17,38 @@ jwt_lock = threading.Lock()
 
 def convert_timestamp(release_time):
     return datetime.utcfromtimestamp(release_time).strftime('%Y-%m-%d %H:%M:%S')
+
+def extract_image_urls_from_protobuf(decoded_response):
+    """Extract image URLs from the protobuf response"""
+    urls = []
+    # This is a placeholder - you'll need to examine the actual protobuf structure
+    # to find where image URLs are stored
+    for item in decoded_response.items:
+        # Assuming there's an image_url field in the item
+        if hasattr(item, 'image_url'):
+            urls.append(item.image_url)
+        # You might need to explore other fields where images might be stored
+    return urls
+
+def process_image_urls(urls):
+    """Process image URLs to extract titles and clean up URLs"""
+    results = []
+    for url in urls:
+        clean_url = url.strip()
+        # Clean up URL encoding issues
+        clean_url = re.sub(r'[\\"].*$', '', clean_url)
+        clean_url = re.sub(r'%..', '', clean_url)
+        
+        # Extract event name from URL
+        event_name = clean_url.split('/')[-1]
+        event_name = re.sub(r'(_880x520.*|\.png|\.jpg|\.jpeg)', '', event_name, flags=re.IGNORECASE)
+        event_name = event_name.replace('_', ' ').title()
+        
+        results.append({
+            "title": event_name,
+            "image_url": clean_url
+        })
+    return results
 
 def extract_token_from_response(data, region):
     if region == "IND":
@@ -40,7 +73,7 @@ def get_jwt_token_sync(region):
         "US": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
         "SAC": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
         "NA": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
-        "default": "https://100067.vercel.app/token?uid=3943739516&password=BFA0A0D9DF6D4EE1AA92354746475A429D775BCA4D8DD822ECBC6D0BF7B51886"
+        "default": "https://100067.vercel.app/token?uid=3943739516&password=BFA0A0D9DF6R4EE1AA92354746475A429D775BCA4D8DD822ECBC6D0BF7B51886"
     }    
     
     url = endpoints.get(region, endpoints["default"])
@@ -152,14 +185,26 @@ def get_player_info():
             return jsonify({"error": "Empty response from API"}), 400
         api_response_bytes = bytes.fromhex(api_response_hex)
         decoded_response = CSGetWishListItemsRes()
-        decoded_response.ParseFromString(api_response_bytes)    
-        wishlist = [
-            {
+        decoded_response.ParseFromString(api_response_bytes)
+        
+        # Extract image URLs from the response and process them
+        image_urls = extract_image_urls_from_protobuf(decoded_response)
+        image_data = process_image_urls(image_urls)
+        
+        # Create wishlist with item details and image information
+        wishlist = []
+        for i, item in enumerate(decoded_response.items):
+            item_data = {
                 "item_id": item.item_id, 
                 "release_time": convert_timestamp(item.release_time)
             }
-            for item in decoded_response.items
-        ]            
+            
+            # Add image data if available
+            if i < len(image_data):
+                item_data.update(image_data[i])
+                
+            wishlist.append(item_data)
+            
         return jsonify({"uid": uid, "wishlist": wishlist})  
     except ValueError:
         return jsonify({"error": "Invalid UID format"}), 400
