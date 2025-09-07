@@ -9,46 +9,27 @@ import uid_generator_pb2
 import threading
 import time
 from datetime import datetime
-import re  # Add this import for regex operations
 
 app = Flask(__name__)
 jwt_token = None
 jwt_lock = threading.Lock()
 
+# Server configuration mapping
+SERVER_CONFIG = {
+    "IND": "https://100067.vercel.app/token?uid=3828066210&password=C41B0098956AE7B79F752FCA873C747060C71D3C17FBE4794F5EB9BD71D4DA95",
+        "BR": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
+        "US": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
+        "SAC": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
+        "NA": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
+        "default": "https://100067.vercel.app/token?uid=3943739516&password=BFA0A0D9DF6D4EE1AA92354746475A429D775BCA4D8DD822ECBC6D0BF7B51886"
+    }    
+}
+
+#image_base_url
+"image_base_url": "https://www.dl.cdn.freefiremobile.com/icons/"
+
 def convert_timestamp(release_time):
     return datetime.utcfromtimestamp(release_time).strftime('%Y-%m-%d %H:%M:%S')
-
-def extract_image_urls_from_protobuf(decoded_response):
-    """Extract image URLs from the protobuf response"""
-    urls = []
-    # This is a placeholder - you'll need to examine the actual protobuf structure
-    # to find where image URLs are stored
-    for item in decoded_response.items:
-        # Assuming there's an image_url field in the item
-        if hasattr(item, 'image_url'):
-            urls.append(item.image_url)
-        # You might need to explore other fields where images might be stored
-    return urls
-
-def process_image_urls(urls):
-    """Process image URLs to extract titles and clean up URLs"""
-    results = []
-    for url in urls:
-        clean_url = url.strip()
-        # Clean up URL encoding issues
-        clean_url = re.sub(r'[\\"].*$', '', clean_url)
-        clean_url = re.sub(r'%..', '', clean_url)
-        
-        # Extract event name from URL
-        event_name = clean_url.split('/')[-1]
-        event_name = re.sub(r'(_880x520.*|\.png|\.jpg|\.jpeg)', '', event_name, flags=re.IGNORECASE)
-        event_name = event_name.replace('_', ' ').title()
-        
-        results.append({
-            "title": event_name,
-            "image_url": clean_url
-        })
-    return results
 
 def extract_token_from_response(data, region):
     if region == "IND":
@@ -67,16 +48,8 @@ def extract_token_from_response(data, region):
 
 def get_jwt_token_sync(region):
     global jwt_token
-    endpoints = {
-        "IND": "https://100067.vercel.app/token?uid=3828066210&password=C41B0098956AE7B79F752FCA873C747060C71D3C17FBE4794F5EB9BD71D4DA95",
-        "BR": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
-        "US": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
-        "SAC": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
-        "NA": "https://100067.vercel.app/token?uid=3943737998&password=92EB4C721DB698B17C1BF61F8F7ECDEC55D814FB35ADA778FA5EE1DC0AEAEDFF",
-        "default": "https://100067.vercel.app/token?uid=3943739516&password=BFA0A0D9DF6R4EE1AA92354746475A429D775BCA4D8DD822ECBC6D0BF7B51886"
-    }    
-    
-    url = endpoints.get(region, endpoints["default"])
+    config = SERVER_CONFIG.get(region, SERVER_CONFIG["default"])
+    url = config["token_url"]
     
     with jwt_lock:
         try:
@@ -109,15 +82,12 @@ def jwt_token_updater(region):
         time.sleep(300)
 
 def get_api_endpoint(region):
-    endpoints = {
-        "IND": "https://client.ind.freefiremobile.com/GetWishListItems",
-        "BR": "https://client.us.freefiremobile.com/GetWishListItems",
-        "US": "https://client.us.freefiremobile.com/GetWishListItems",
-        "SAC": "https://client.us.freefiremobile.com/GetWishListItems",
-        "NA": "https://client.us.freefiremobile.com/GetWishListItems",
-        "default": "https://clientbp.ggblueshark.com/GetWishListItems"
-    }
-    return endpoints.get(region, endpoints["default"])
+    config = SERVER_CONFIG.get(region, SERVER_CONFIG["default"])
+    return config["api_endpoint"]
+
+def get_image_base_url(region):
+    config = SERVER_CONFIG.get(region, SERVER_CONFIG["default"])
+    return config["image_base_url"]
 
 key = "Yg&tc%DEuh6%Zc^8"
 iv = "6oyZDr22E3ychjM%"
@@ -187,24 +157,17 @@ def get_player_info():
         decoded_response = CSGetWishListItemsRes()
         decoded_response.ParseFromString(api_response_bytes)
         
-        # Extract image URLs from the response and process them
-        image_urls = extract_image_urls_from_protobuf(decoded_response)
-        image_data = process_image_urls(image_urls)
+        # Get image base URL for the region
+        image_base_url = get_image_base_url(region)
         
-        # Create wishlist with item details and image information
-        wishlist = []
-        for i, item in enumerate(decoded_response.items):
-            item_data = {
+        wishlist = [
+            {
                 "item_id": item.item_id, 
-                "release_time": convert_timestamp(item.release_time)
+                "release_time": convert_timestamp(item.release_time),
+                "image_url": f"{image_base_url}{item.item_id}.png"
             }
-            
-            # Add image data if available
-            if i < len(image_data):
-                item_data.update(image_data[i])
-                
-            wishlist.append(item_data)
-            
+            for item in decoded_response.items
+        ]            
         return jsonify({"uid": uid, "wishlist": wishlist})  
     except ValueError:
         return jsonify({"error": "Invalid UID format"}), 400
