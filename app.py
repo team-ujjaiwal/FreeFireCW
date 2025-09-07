@@ -79,10 +79,10 @@ def jwt_token_updater(region):
 def get_api_endpoint(region):
     endpoints = {
         "IND": "https://client.ind.freefiremobile.com/GetWishListItems",
-        "BR": "https://client.br.freefiremobile.com/GetWishListItems",
+        "BR": "https://client.us.freefiremobile.com/GetWishListItems",
         "US": "https://client.us.freefiremobile.com/GetWishListItems",
-        "SAC": "https://client.sac.freefiremobile.com/GetWishListItems",
-        "NA": "https://client.na.freefiremobile.com/GetWishListItems",
+        "SAC": "https://client.us.freefiremobile.com/GetWishListItems",
+        "NA": "https://client.us.freefiremobile.com/GetWishListItems",
         "default": "https://clientbp.ggblueshark.com/GetWishListItems"
     }
     return endpoints.get(region, endpoints["default"])
