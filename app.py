@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 import requests
-import data_pb2  # Import the generated protobuf module
+import data_pb2
 
 app = Flask(__name__)
 
@@ -23,9 +23,10 @@ iv = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37
 def add_items():
     jwt_token = request.args.get("token")
     region = request.args.get("region", "DEFAULT")
-    items = [int(request.args.get(f"item{i+1}")) for i in range(2) if request.args.get(f"item{i+1}")]
+    # FIX: Changed range(2) to range(15) to collect all 15 items
+    items = [int(request.args.get(f"item{i+1}")) for i in range(15) if request.args.get(f"item{i+1}")]
 
-    if not jwt_token or len(items) != 2:
+    if not jwt_token or len(items) != 15:
         return jsonify({"error": "Missing token or item1 to item15"}), 400
 
     # Use the generated protobuf class
