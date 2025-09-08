@@ -74,7 +74,7 @@ def send_friend_request(author_uid, target_uid, token, region):
     try:
         message = RequestAddingFriend_pb2.RequestAddingFriend()
         message.AuthorUid = int(author_uid)
-        message.TargetUid = int(target_uid)
+        message.Target = int(target_uid)  # Changed from TargetUid to Target
         serialized = message.SerializeToString()
         encrypted_bytes = encrypt_message(serialized)
 
