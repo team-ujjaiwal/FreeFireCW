@@ -2,11 +2,10 @@ from flask import Flask, request, jsonify
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 import requests
-import data_pb2
+import data_pb2  # Import the generated protobuf module
 
 app = Flask(__name__)
 
-# Your existing region_urls, key, and iv definitions remain the same
 region_urls = {
     "IND": "https://client.ind.freefiremobile.com/SetPlayerGalleryShowInfo",
     "BR": "https://client.us.freefiremobile.com/SetPlayerGalleryShowInfo",
@@ -21,13 +20,12 @@ iv = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37
 
 @app.route('/add_items', methods=['GET'])
 def add_items():
-    jwt_token = request.args.get("token")
+    jwt_token = request.args.get("jwt")
     region = request.args.get("region", "DEFAULT")
-    # FIX: Changed range(2) to range(15) to collect all 15 items
     items = [int(request.args.get(f"item{i+1}")) for i in range(15) if request.args.get(f"item{i+1}")]
 
     if not jwt_token or len(items) != 15:
-        return jsonify({"error": "Missing token or item1 to item15"}), 400
+        return jsonify({"error": "Missing JWT or item1 to item15"}), 400
 
     # Use the generated protobuf class
     data = data_pb2.MainMessage()
@@ -35,7 +33,6 @@ def add_items():
     container1 = data.field_2.add()
     container1.field_1 = 1
 
-    # Your template and rest of the code remains the same
     template = [
         {"field_1": 2, "field_4": 1, "field_6": {"field_6": items[0]}},
         {"field_1": 2, "field_4": 1, "field_5": 4, "field_6": {"field_6": items[1]}},
