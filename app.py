@@ -25,7 +25,7 @@ def add_items():
     region = request.args.get("region", "DEFAULT")
     items = [int(request.args.get(f"item{i+1}")) for i in range(2) if request.args.get(f"item{i+1}")]
 
-    if not jwt_token or len(items) != 15:
+    if not jwt_token or len(items) != 2:
         return jsonify({"error": "Missing token or item1 to item15"}), 400
 
     # Use the generated protobuf class
