@@ -1,167 +1,96 @@
 from flask import Flask, request, jsonify
-import jwt
-import requests
-import RemoveFriend_Req_pb2
-import RequestAddingFriend_pb2
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
+import requests
+import data_pb2  # Import the generated protobuf module
 
 app = Flask(__name__)
 
-# AES Key and IV (hardcoded as per FF API requirement)
-AES_KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
-AES_IV = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
-
-# Region URLs mapping
+# Your existing region_urls, key, and iv definitions remain the same
 region_urls = {
-    "IND": "https://client.ind.freefiremobile.com/",
-    "BR": "https://client.us.freefiremobile.com/",
-    "US": "https://client.us.freefiremobile.com/",
-    "SAC": "https://client.us.freefiremobile.com/",
-    "NA": "https://client.us.freefiremobile.com/",
+    "IND": "https://client.ind.freefiremobile.com/SetPlayerGalleryShowInfo",
+    "BR": "https://client.us.freefiremobile.com/SetPlayerGalleryShowInfo",
+    "US": "https://client.us.freefiremobile.com/SetPlayerGalleryShowInfo",
+    "SAC": "https://client.us.freefiremobile.com/SetPlayerGalleryShowInfo",
+    "NA": "https://client.us.freefiremobile.com/SetPlayerGalleryShowInfo",
+    "DEFAULT": "https://clientbp.ggblueshark.com/SetPlayerGalleryShowInfo"
 }
-default_url = "https://clientbp.ggblueshark.com/"
 
-def encrypt_message(data_bytes):
-    cipher = AES.new(AES_KEY, AES.MODE_CBC, AES_IV)
-    encrypted = cipher.encrypt(pad(data_bytes, AES.block_size))
-    return encrypted
+key = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
+iv = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 
-def decode_author_uid(token):
-    try:
-        decoded = jwt.decode(token, options={"verify_signature": False})
-        return decoded.get("account_id") or decoded.get("sub")
-    except Exception as e:
-        return None
+@app.route('/add_items', methods=['GET'])
+def add_items():
+    jwt_token = request.args.get("token")
+    region = request.args.get("region", "DEFAULT")
+    items = [int(request.args.get(f"item{i+1}")) for i in range(15) if request.args.get(f"item{i+1}")]
 
-# Token Generator
-def generate_token(uid, password):
-    try:
-        r = requests.get(f"https://100067.vercel.app/token?uid={uid}&password={password}")
-        return r.json().get("token", "")
-    except:
-        return ""
+    if not jwt_token or len(items) != 15:
+        return jsonify({"error": "Missing token or item1 to item15"}), 400
 
-def get_base_url(region):
-    return region_urls.get(region.upper(), default_url)
+    # Use the generated protobuf class
+    data = data_pb2.MainMessage()
+    data.field_1 = 1
+    container1 = data.field_2.add()
+    container1.field_1 = 1
 
-def remove_friend(author_uid, target_uid, token, region):
-    try:
-        message = RemoveFriend_Req_pb2.RemoveFriend()
-        message.AuthorUid = int(author_uid)
-        message.TargetUid = int(target_uid)
-        serialized = message.SerializeToString()
-        encrypted_bytes = encrypt_message(serialized)
+    # Your template and rest of the code remains the same
+    template = [
+        {"field_1": 2, "field_4": 1, "field_6": {"field_6": items[0]}},
+        {"field_1": 2, "field_4": 1, "field_5": 4, "field_6": {"field_6": items[1]}},
+        {"field_1": 2, "field_4": 1, "field_5": 2, "field_6": {"field_6": items[2]}},
+        {"field_1": 13, "field_3": 1, "field_6": {"field_6": items[3]}},
+        {"field_1": 13, "field_3": 1, "field_4": 2, "field_6": {"field_6": items[4]}},
+        {"field_1": 13, "field_3": 1, "field_5": 2, "field_6": {"field_6": items[5]}},
+        {"field_1": 13, "field_3": 1, "field_5": 4, "field_6": {"field_6": items[6]}},
+        {"field_1": 13, "field_3": 1, "field_4": 2, "field_5": 2, "field_6": {"field_6": items[7]}},
+        {"field_1": 13, "field_3": 1, "field_4": 2, "field_5": 4, "field_6": {"field_6": items[8]}},
+        {"field_1": 13, "field_3": 1, "field_4": 4, "field_6": {"field_6": items[9]}},
+        {"field_1": 13, "field_3": 1, "field_4": 4, "field_5": 2, "field_6": {"field_6": items[10]}},
+        {"field_1": 13, "field_3": 1, "field_4": 4, "field_5": 4, "field_6": {"field_6": items[11]}},
+        {"field_1": 13, "field_3": 1, "field_4": 6, "field_6": {"field_6": items[12]}},
+        {"field_1": 13, "field_3": 1, "field_4": 6, "field_5": 2, "field_6": {"field_6": items[13]}},
+        {"field_1": 13, "field_3": 1, "field_4": 6, "field_5": 4, "field_6": {"field_6": items[14]}},
+    ]
 
-        base_url = get_base_url(region)
-        url = f"{base_url}RemoveFriend"
-        
-        headers = {
-            'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
-            'Connection': "Keep-Alive",
-            'Accept-Encoding': "gzip",
-            'Authorization': f"Bearer {token}",
-            'Content-Type': "application/x-www-form-urlencoded",
-            'Expect': "100-continue",
-            'X-Unity-Version': "2018.4.11f1",
-            'X-GA': "v1 1",
-            'ReleaseVersion': "OB50"
-        }
+    for item_data in template:
+        item = container1.field_2.add()
+        item.field_1 = item_data["field_1"]
+        if "field_3" in item_data: item.field_3 = item_data["field_3"]
+        if "field_4" in item_data: item.field_4 = item_data["field_4"]
+        if "field_5" in item_data: item.field_5 = item_data["field_5"]
+        item.field_6.field_6 = item_data["field_6"]["field_6"]
 
-        response = requests.post(url, data=encrypted_bytes, headers=headers)
+    container2 = data.field_2.add()
+    container2.field_1 = 9
+    it1 = container2.field_2.add()
+    it1.field_4 = 3
+    it1.field_6.field_14 = 3048205855
+    it2 = container2.field_2.add()
+    it2.field_4 = 3
+    it2.field_5 = 3
+    it2.field_6.field_14 = 3048205855
 
-        if response.status_code == 200:
-            return {"status": "success", "message": "Friend removed successfully"}
-        else:
-            return {"status": "fail", "code": response.status_code, "response": response.text}
+    data_bytes = data.SerializeToString()
+    padded_data = pad(data_bytes, AES.block_size)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    encrypted_data = cipher.encrypt(padded_data)
 
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    headers = {
+        "Authorization": f"Bearer {jwt_token}",
+        "X-Unity-Version": "2018.4.11f1",
+        "X-GA": "v1 1",
+        "ReleaseVersion": "OB50",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 11)",
+        "Connection": "Keep-Alive",
+        "Accept-Encoding": "gzip"
+    }
 
-def send_friend_request(author_uid, target_uid, token, region):
-    try:
-        message = RequestAddingFriend_pb2.RequestAddingFriend()
-        message.AuthorUid = int(author_uid)
-        message.Target = int(target_uid)  # Changed from TargetUid to Target
-        serialized = message.SerializeToString()
-        encrypted_bytes = encrypt_message(serialized)
+    url = region_urls.get(region.upper(), region_urls["DEFAULT"])
+    response = requests.post(url, headers=headers, data=encrypted_data)
 
-        base_url = get_base_url(region)
-        url = f"{base_url}RequestAddingFriend"
-        
-        headers = {
-            'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
-            'Connection': "Keep-Alive",
-            'Accept-Encoding': "gzip",
-            'Authorization': f"Bearer {token}",
-            'Content-Type': "application/x-www-form-urlencoded",
-            'Expect': "100-continue",
-            'X-Unity-Version': "2018.4.11f1",
-            'X-GA': "v1 1",
-            'ReleaseVersion': "OB50"
-        }
-
-        response = requests.post(url, data=encrypted_bytes, headers=headers)
-
-        if response.status_code == 200:
-            return {"status": "success", "message": "Friend request sent successfully"}
-        else:
-            return {"status": "fail", "code": response.status_code, "response": response.text}
-
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.route('/remove_request', methods=['GET'])
-def remove_friend_api():
-    token = request.args.get('token', '')
-    target_uid = request.args.get('uid', '')
-    region = request.args.get('region', 'IND')
-    
-    # If token is not provided, try to generate it from uid and password
-    if not token:
-        uid = request.args.get('author_uid', '')
-        password = request.args.get('password', '')
-        if not uid or not password:
-            return jsonify({"status": "fail", "message": "Missing 'token' or 'author_uid' and 'password'"}), 400
-        token = generate_token(uid, password)
-        if not token:
-            return jsonify({"status": "fail", "message": "Failed to generate token from UID and password"}), 400
-
-    if not target_uid:
-        return jsonify({"status": "fail", "message": "Missing 'uid' (target UID)"}), 400
-
-    author_uid = decode_author_uid(token)
-    if not author_uid:
-        return jsonify({"status": "fail", "message": "Unable to decode author UID from token"}), 400
-
-    result = remove_friend(author_uid, target_uid, token, region)
-    return jsonify(result)
-
-@app.route('/send_request', methods=['GET'])
-def send_friend_request_api():
-    token = request.args.get('token', '')
-    target_uid = request.args.get('uid', '')
-    region = request.args.get('region', 'IND')
-    
-    # If token is not provided, try to generate it from uid and password
-    if not token:
-        uid = request.args.get('author_uid', '')
-        password = request.args.get('password', '')
-        if not uid or not password:
-            return jsonify({"status": "fail", "message": "Missing 'token' or 'author_uid' and 'password'"}), 400
-        token = generate_token(uid, password)
-        if not token:
-            return jsonify({"status": "fail", "message": "Failed to generate token from UID and password"}), 400
-
-    if not target_uid:
-        return jsonify({"status": "fail", "message": "Missing 'uid' (target UID)"}), 400
-
-    author_uid = decode_author_uid(token)
-    if not author_uid:
-        return jsonify({"status": "fail", "message": "Unable to decode author UID from token"}), 400
-
-    result = send_friend_request(author_uid, target_uid, token, region)
-    return jsonify(result)
+    return jsonify({"status": response.status_code, "response": response.text})
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5005)
+    app.run(debug=True, port=5000)
