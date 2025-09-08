@@ -21,7 +21,7 @@ def convert_timestamp(release_time):
 
 def extract_token_from_response(data, region):
     if region == "IND":
-        if data.get('status') in ['success', 'live']:
+        if data.get('status') in ['token', 'live']:
             return data.get('token')
     elif region in ["BR", "US", "SAC", "NA"]:
         if isinstance(data, dict) and 'token' in data:
