@@ -34,6 +34,14 @@ def decode_author_uid(token):
     except Exception as e:
         return None
 
+# Token Generator
+def generate_token(uid, password):
+    try:
+        r = requests.get(f"https://100067.vercel.app/token?uid={uid}&password={password}")
+        return r.json().get("token", "")
+    except:
+        return ""
+
 def get_base_url(region):
     return region_urls.get(region.upper(), default_url)
 
@@ -105,12 +113,22 @@ def send_friend_request(author_uid, target_uid, token, region):
 
 @app.route('/remove_request', methods=['GET'])
 def remove_friend_api():
-    token = request.args.get('token')
-    target_uid = request.args.get('uid')
+    token = request.args.get('token', '')
+    target_uid = request.args.get('uid', '')
     region = request.args.get('region', 'IND')
+    
+    # If token is not provided, try to generate it from uid and password
+    if not token:
+        uid = request.args.get('author_uid', '')
+        password = request.args.get('password', '')
+        if not uid or not password:
+            return jsonify({"status": "fail", "message": "Missing 'token' or 'author_uid' and 'password'"}), 400
+        token = generate_token(uid, password)
+        if not token:
+            return jsonify({"status": "fail", "message": "Failed to generate token from UID and password"}), 400
 
-    if not token or not target_uid:
-        return jsonify({"status": "fail", "message": "Missing 'token' or 'uid'"}), 400
+    if not target_uid:
+        return jsonify({"status": "fail", "message": "Missing 'uid' (target UID)"}), 400
 
     author_uid = decode_author_uid(token)
     if not author_uid:
@@ -121,12 +139,22 @@ def remove_friend_api():
 
 @app.route('/send_request', methods=['GET'])
 def send_friend_request_api():
-    token = request.args.get('token')
-    target_uid = request.args.get('uid')
+    token = request.args.get('token', '')
+    target_uid = request.args.get('uid', '')
     region = request.args.get('region', 'IND')
+    
+    # If token is not provided, try to generate it from uid and password
+    if not token:
+        uid = request.args.get('author_uid', '')
+        password = request.args.get('password', '')
+        if not uid or not password:
+            return jsonify({"status": "fail", "message": "Missing 'token' or 'author_uid' and 'password'"}), 400
+        token = generate_token(uid, password)
+        if not token:
+            return jsonify({"status": "fail", "message": "Failed to generate token from UID and password"}), 400
 
-    if not token or not target_uid:
-        return jsonify({"status": "fail", "message": "Missing 'token' or 'uid'"}), 400
+    if not target_uid:
+        return jsonify({"status": "fail", "message": "Missing 'uid' (target UID)"}), 400
 
     author_uid = decode_author_uid(token)
     if not author_uid:
